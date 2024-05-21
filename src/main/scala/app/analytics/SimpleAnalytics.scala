@@ -12,19 +12,88 @@ class SimpleAnalytics() extends Serializable {
   private var ratingsPartitioner: HashPartitioner = null
   private var moviesPartitioner: HashPartitioner = null
 
+  private var titlesGroupedById: RDD[(Int, Iterable[(Int, String, List[String])])] = null
+  private var ratingsGroupedByYearByTitle: RDD[(Int, Map[Int, Iterable[(Int, Int, Option[Double], Double, Int)]])] = null
+
   def init(
             ratings: RDD[(Int, Int, Option[Double], Double, Int)],
-            movie: RDD[(Int, String, List[String])]
-          ): Unit = ???
+            movies: RDD[(Int, String, List[String])]
+          ): Unit = {
+    val numPartitions = 5 //hyper-parameter
+    ratingsPartitioner = new HashPartitioner(numPartitions)
+    moviesPartitioner = new HashPartitioner(numPartitions)
 
-  def getNumberOfMoviesRatedEachYear: RDD[(Int, Int)] = ???
+    val ratings_by_year = ratings.map{ratings =>
+      val year = DateTime(ratings._5 * 1000L).getYear
+      (ratings._1, ratings._2, ratings._3, ratings._4, year)
+    }.groupBy(_._5)
 
-  def getMostRatedMovieEachYear: RDD[(Int, String)] = ???
+    val ratings_by_year_by_movie_id = ratings_by_year.distinct().mapValues(ratings => ratings.groupBy(_._2))
+    val movies_by_id = movies.groupBy(_._1)
 
-  def getMostRatedGenreEachYear: RDD[(Int, List[String])] = ???
+    ratingsGroupedByYearByTitle = ratings_by_year_by_movie_id.partitionBy(ratingsPartitioner).persist(MEMORY_AND_DISK)
+    titlesGroupedById = movies_by_id.partitionBy(moviesPartitioner).persist(MEMORY_AND_DISK)
+  }
+
+  def getNumberOfMoviesRatedEachYear: RDD[(Int, Int)] = {
+    ratingsGroupedByYearByTitle.map{case(year, movie_ratings) => (year, movie_ratings.keys.size)}
+  }
+
+  def getMostRatedMovieEachYear: RDD[(Int, String)] = {
+    // calculate the number of ratings per movie for each year
+    val movieRatingsCountByYear: RDD[(Int, Map[Int, Int])] = ratingsGroupedByYearByTitle.mapValues { yearGroup =>
+      yearGroup.map { case (movie_id, ratings) =>
+        (movie_id, ratings.size)
+      }
+    }
+
+    // find the movie with the most ratings for each year
+    val mostRatedMovieIdByYear: RDD[(Int, Int)] = movieRatingsCountByYear.mapValues { movie_counts =>
+      movie_counts.maxBy { case (_, count) => count }._1
+    }
+
+    // join with titles to get the movie name
+    val mostRatedMovieNameByYear: RDD[(Int, String)] = mostRatedMovieIdByYear
+      .join(titlesGroupedById.mapValues(_.head._2))
+      .map { case (year, (movie_id, movie_name)) => (year, movie_name) }
+
+    mostRatedMovieNameByYear
+  }
+
+  def getMostRatedGenreEachYear: RDD[(Int, List[String])] = {
+    // calculate the number of ratings per movie for each year
+    val movieRatingsCountByYear: RDD[(Int, Map[Int, Int])] = ratingsGroupedByYearByTitle.mapValues { yearGroup =>
+      yearGroup.map { case (movie_id, ratings) =>
+        (movie_id, ratings.size)
+      }
+    }
+
+    // find the movie with the most ratings for each year
+    val mostRatedMovieIdByYear: RDD[(Int, Int)] = movieRatingsCountByYear.mapValues { movie_counts =>
+      movie_counts.maxBy { case (_, count) => count }._1
+    }
+
+    // map movies IDs to their genres, extracting genres for the most rated movies
+    val mostRatedMovieGenresByYear: RDD[(Int, List[String])] = mostRatedMovieIdByYear
+      .join(titlesGroupedById.mapValues(_.head._3))
+      .map { case (year, (movie_id, genres)) => (year, genres)}
+
+    mostRatedMovieGenresByYear
+  }
 
   // Note: if two genre has the same number of rating, return the first one based on lexicographical sorting on genre.
-  def getLeastAndMostRatedGenreAllTime: ((String, Int), (String, Int)) = ???
+  def getLeastAndMostRatedGenreAllTime: ((String, Int), (String, Int)) = {
+    val genres_most_rated = getMostRatedGenreEachYear
+    val genre_counts = genres_most_rated.flatMap {
+      case (_, genres) => genres.map(genre => (genre, 1))
+    }
+    val total_genre_counts = genre_counts.reduceByKey(_ + _)
+    val sorted_genres = total_genre_counts.collect().sortBy(_._2)
+
+    val least_genre = if (sorted_genres.nonEmpty) sorted_genres.head else ("No", 0)
+    val most_genre = if (sorted_genres.nonEmpty) sorted_genres.last else ("No", 0)
+    (least_genre, most_genre)
+  }
 
   /**
    * Filter the movies RDD having the required genres
@@ -34,7 +103,11 @@ class SimpleAnalytics() extends Serializable {
    * @return The RDD for the movies which are in the supplied genres
    */
   def getAllMoviesByGenre(movies: RDD[(Int, String, List[String])],
-                          requiredGenres: RDD[String]): RDD[String] = ???
+                          requiredGenres: RDD[String]): RDD[String] = {
+    val filtered_movies = movies.filter(movie => movie._3.intersect(requiredGenres.toString()).nonEmpty)
+      .map(movie => movie._2)
+    filtered_movies
+  }
 
   /**
    * Filter the movies RDD having the required genres
@@ -48,7 +121,12 @@ class SimpleAnalytics() extends Serializable {
    */
   def getAllMoviesByGenre_usingBroadcast(movies: RDD[(Int, String, List[String])],
                                          requiredGenres: List[String],
-                                         broadcastCallback: List[String] => Broadcast[List[String]]): RDD[String] = ???
+                                         broadcastCallback: List[String] => Broadcast[List[String]]): RDD[String] = {
+    val broadcast_genres = broadcastCallback(requiredGenres)
+    val filtered_movies_with_broadcast = movies.filter(movie => movie._3.intersect(broadcast_genres.value).nonEmpty)
+      .map(movie => movie._2)
+    filtered_movies_with_broadcast
+  }
 
 }
 

@@ -35,30 +35,34 @@ class SimpleAnalytics() extends Serializable {
     titlesGroupedById = movies_by_id.partitionBy(moviesPartitioner).persist(MEMORY_AND_DISK)
   }
 
-  def getNumberOfMoviesRatedEachYear: RDD[(Int, Int)] = {
-    val numberOfMovies = ratingsGroupedByYearByTitle.map{case(year, movie_ratings) => (year, movie_ratings.keys.size)}
-
-    numberOfMovies
-  }
-
-  def getMostRatedMovieEachYear: RDD[(Int, String)] = {
-    // calculate the number of ratings per movie for each year
+  // helper function
+  private def computeMostRatedMovieIdByYear: RDD[(Int, Int)] = {
     val movieRatingsCountByYear: RDD[(Int, Map[Int, Int])] = ratingsGroupedByYearByTitle.mapValues { movie_ratings =>
       movie_ratings.map { case (movie_id, ratings) =>
         (movie_id, ratings.size)
       }
     }
 
-    // find the movie with the most ratings for each year
-    val mostRatedMovieIdByYear: RDD[(Int, Int)] = movieRatingsCountByYear.mapValues { movie_counts =>
+    movieRatingsCountByYear.mapValues { movie_counts =>
       movie_counts.toList.sortWith{
         (left, right) =>
           if (left._2 == right._2) left._1 > right._1 // sort by movie ID in descending if counts are the same
           else left._2 > right._2 // otherwise sort by count in descending
       }.head._1
     }.map {
-      case (x,y) => (y,x)
+      case (year, movie_id) => (year, movie_id)
     }
+  }
+
+  def getNumberOfMoviesRatedEachYear: RDD[(Int, Int)] = {
+    val number_Of_Movies = ratingsGroupedByYearByTitle.map{case(year, movie_ratings) => (year, movie_ratings.keys.size)}
+
+    number_Of_Movies
+  }
+
+  def getMostRatedMovieEachYear: RDD[(Int, String)] = {
+    // compute the mostRatedMovieIdByYear
+    val mostRatedMovieIdByYear = computeMostRatedMovieIdByYear
 
     // join with titles to get the movie name
     val mostRatedMovieNameByYear: RDD[(Int, String)] = mostRatedMovieIdByYear
@@ -69,23 +73,8 @@ class SimpleAnalytics() extends Serializable {
   }
 
   def getMostRatedGenreEachYear: RDD[(Int, List[String])] = {
-    // calculate the number of ratings per movie for each year
-    val movieRatingsCountByYear: RDD[(Int, Map[Int, Int])] = ratingsGroupedByYearByTitle.mapValues { movie_ratings =>
-      movie_ratings.map { case (movie_id, ratings) =>
-        (movie_id, ratings.size)
-      }
-    }
-
-    // find the movie with the most ratings for each year
-    val mostRatedMovieIdByYear: RDD[(Int, Int)] = movieRatingsCountByYear.mapValues { movie_counts =>
-      movie_counts.toList.sortWith {
-        (left, right) =>
-          if (left._2 == right._2) left._1 > right._1 // sort by movie ID in descending if counts are the same
-          else left._2 > right._2 // otherwise sort by count in descending
-      }.head._1
-    }.map {
-      case (x, y) => (y, x)
-    }
+    // compute the mostRatedMovieIdByYear
+    val mostRatedMovieIdByYear = computeMostRatedMovieIdByYear
 
     // map movies IDs to their genres, extracting genres for the most rated movies
     val mostRatedMovieGenresByYear: RDD[(Int, List[String])] = mostRatedMovieIdByYear

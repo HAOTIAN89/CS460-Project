@@ -103,12 +103,15 @@ class Aggregator(sc: SparkContext) extends Serializable {
     // aggregate to compute the total rating and count
     val (total_rating, total_count) = filtered_titles.aggregate(zeroValue)(seqOp, combOp)
 
-    if (total_count == 0) {
+    // calculate and return the final result
+    val kq_result = if (total_count == 0) {
       if (filtered_titles.isEmpty()) -1.0 // no id exist with the given keywords
       else 0.0 // ids exist but are not rated
     } else {
       total_rating / total_count
     }
+
+    kq_result
   }
 
   /**
@@ -117,5 +120,41 @@ class Aggregator(sc: SparkContext) extends Serializable {
    * @param delta Delta ratings that haven't been included previously in aggregates
    *              format: (user_id: Int, title_id: Int, old_rating: Option[Double], rating: Double, timestamp: Int)
    */
-  def updateResult(delta_ : Array[(Int, Int, Option[Double], Double, Int)]): Unit = ???
+  def updateResult(delta_ : Array[(Int, Int, Option[Double], Double, Int)]): Unit = {
+    // convert the array of updates into an RDD
+    val deltaRDD = sc.parallelize(delta_)
+
+    // then design the aggregate pattern
+    val zeroValue = (0.0, 0)
+    val seqOp = (acc: (Double, Int), value: (Option[Double], Double)) => {
+      val (current_sum, current_count) = acc
+      val (old_rating, new_rating) = value
+      val net_rating = old_rating match {
+        case Some(old) => new_rating - old // calculate net change if old rating exists
+        case None => new_rating // directly take new rating if no old rating
+      }
+      (current_sum + net_rating, current_count + 1)
+    }
+    val combOp = pattern
+
+    // aggregate changes by id
+    val update_aggregated = deltaRDD.map{
+      case (_, id, old_rating, new_rating, _) =>
+        (id, (old_rating, new_rating))
+    }.aggregateByKey(zeroValue)(seqOp, combOp)
+
+    // join the aggregated updates with the existing data
+    val updated_ratings = movie_id_ratings.leftOuterJoin(update_aggregated).map {
+      case (id, ((name, avg_rating, count, keywords), Some((rating_change, change_count)))) =>
+        val new_count = count + change_count
+        val update_avg = (avg_rating * count + rating_change) / new_count
+        (id, (name, update_avg, new_count, keywords))
+      case (id, (details, None)) =>
+        (id, details) // no updates for this movie
+    }
+
+    // un persist the old RDD and persist the new one
+    movie_id_ratings.unpersist()
+    movie_id_ratings = updated_ratings.partitionBy(partitioner).persist(MEMORY_AND_DISK)
+  }
 }

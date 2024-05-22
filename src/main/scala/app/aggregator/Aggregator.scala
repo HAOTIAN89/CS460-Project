@@ -125,17 +125,18 @@ class Aggregator(sc: SparkContext) extends Serializable {
     val deltaRDD = sc.parallelize(delta_)
 
     // then design the aggregate pattern
-    val zeroValue = (0.0, 0)
-    val seqOp = (acc: (Double, Int), value: (Option[Double], Double)) => {
-      val (current_sum, current_count) = acc
+    val zeroValue = (0.0, 0, 0.0)
+    val seqOp = (acc: (Double, Int, Double), value: (Option[Double], Double)) => {
+      val (sum_ratings, num_ratings, adjustment) = acc
       val (old_rating, new_rating) = value
-      val net_rating = old_rating match {
-        case Some(old) => new_rating - old // calculate net change if old rating exists
-        case None => new_rating // directly take new rating if no old rating
+      old_rating match {
+        case Some(old) => (sum_ratings + new_rating - old, num_ratings, adjustment + new_rating - old)
+        case None => (sum_ratings + new_rating, num_ratings + 1, adjustment + new_rating)
       }
-      (current_sum + net_rating, current_count + 1)
     }
-    val combOp = pattern
+    val combOp = (acc1: (Double, Int, Double), acc2: (Double, Int, Double)) => {
+      (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc2._3)
+    }
 
     // aggregate changes by id
     val update_aggregated = deltaRDD.map{
@@ -145,10 +146,11 @@ class Aggregator(sc: SparkContext) extends Serializable {
 
     // join the aggregated updates with the existing data
     val updated_ratings = movie_id_ratings.leftOuterJoin(update_aggregated).map {
-      case (id, ((name, avg_rating, count, keywords), Some((rating_change, change_count)))) =>
-        val new_count = count + change_count
-        val update_avg = (avg_rating * count + rating_change) / new_count
-        (id, (name, update_avg, new_count, keywords))
+      case (id, ((name, avg_rating, count, keywords), Some((sum_ratings, num_ratings, adjustment)))) =>
+        val new_count = count + num_ratings
+        val new_sum = avg_rating * count + adjustment
+        val updated_avg = if (new_count > 0) new_sum / new_count else 0.0
+        (id, (name, updated_avg, new_count, keywords))
       case (id, (details, None)) =>
         (id, details) // no updates for this movie
     }

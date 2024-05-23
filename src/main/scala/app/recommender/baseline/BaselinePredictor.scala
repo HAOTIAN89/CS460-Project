@@ -48,8 +48,10 @@ class BaselinePredictor() extends Serializable {
 
     val predict_result = if (movies_avg_deviation == 0.0) user_avg
     else {
-      val adjustment = calculateDeviation((user_avg + movies_avg_deviation), user_avg)
-      user_avg + adjustment
+      val adjustment = if (user_avg + movies_avg_deviation > user_avg) (5 - user_avg)
+      else if (user_avg + movies_avg_deviation < user_avg) (user_avg - 1)
+      else 1
+      user_avg + movies_avg_deviation * adjustment
     }
 
     predict_result

@@ -31,7 +31,18 @@ class LSHIndex(data: RDD[(Int, String, List[String])], seed : IndexedSeq[Int]) e
    * @return Data structure of LSH index
    */
   def getBuckets()
-  : RDD[(IndexedSeq[Int], List[(Int, String, List[String])])] = ???
+  : RDD[(IndexedSeq[Int], List[(Int, String, List[String])])] = {
+    val buckets = data.map { case (id, name, keywords) =>
+      (minhash.hash(keywords), (id, name, keywords))
+    }.groupByKey().mapValues(_.toList)
+    val numPartitions = buckets.getNumPartitions
+    val partitioner = new HashPartitioner(numPartitions)
+
+    // optional
+    buckets.partitionBy(partitioner)
+    buckets.cache()
+    buckets
+  }
 
   /**
    * Lookup operation on the LSH index
@@ -42,5 +53,13 @@ class LSHIndex(data: RDD[(Int, String, List[String])], seed : IndexedSeq[Int]) e
    *         If no match exists in the LSH index, return an empty result list.
    */
   def lookup[T: ClassTag](queries: RDD[(IndexedSeq[Int], T)])
-  : RDD[(IndexedSeq[Int], T, List[(Int, String, List[String])])] = ???
+  : RDD[(IndexedSeq[Int], T, List[(Int, String, List[String])])] = {
+    val buckets = getBuckets()
+    val queries_matched = queries.leftOuterJoin(buckets).map {
+      case (signature, (payload, result)) =>
+        (signature, payload, result.getOrElse(List.empty))
+    }
+
+    queries_matched
+  }
 }

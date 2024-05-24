@@ -50,7 +50,7 @@ class SimpleAnalytics() extends Serializable {
           else left._2 > right._2 // otherwise sort by count in descending
       }.head._1
     }.map {
-      case (year, movie_id) => (year, movie_id)
+      case (year, movie_id) => (movie_id, year)
     }
   }
 

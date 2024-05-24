@@ -19,10 +19,10 @@ class RatingsLoader(sc : SparkContext, path : String) extends Serializable {
    * @return The RDD for the given ratings
    */
   def load() : RDD[(Int, Int, Option[Double], Double, Int)] = {
-    val raw = sc.textFile(getClass.getResource(path).getPath)
+    val raws = sc.textFile(getClass.getResource(path).getPath)
     // val raw = sc.textFile(path)
-    raw.map { line =>
-      val splitting = line.split("\\|")
+    raws.map { raw =>
+      val splitting = raw.split("\\|")
       val user_id = splitting(0).toInt
       val movie_id = splitting(1).toInt
       val old_rating = if (splitting.length > 4 && splitting(2).nonEmpty) Some(splitting(2).toDouble) else None // option

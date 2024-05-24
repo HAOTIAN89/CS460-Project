@@ -55,7 +55,7 @@ class SimpleAnalytics() extends Serializable {
   }
 
   def getNumberOfMoviesRatedEachYear: RDD[(Int, Int)] = {
-    val number_Of_Movies = ratingsGroupedByYearByTitle.map{case(year, movie_ratings) => (year, movie_ratings.keys.size)}
+    val number_Of_Movies = ratingsGroupedByYearByTitle.map{ case (year, movie_ratings) => (year, movie_ratings.size)}
 
     number_Of_Movies
   }
@@ -88,13 +88,13 @@ class SimpleAnalytics() extends Serializable {
   def getLeastAndMostRatedGenreAllTime: ((String, Int), (String, Int)) = {
     val genres_most_rated = getMostRatedGenreEachYear
     val genre_counts = genres_most_rated.flatMap {
-      case (_, genres) => genres.map(genre => (genre, 1))
-    }
-    val total_genre_counts = genre_counts.reduceByKey(_ + _)
-    val most_genre = total_genre_counts
-      .sortBy(x=>(-x._2, x._1)).first()
-    val least_genre = total_genre_counts
-      .sortBy(x => (x._2, x._1)).first()
+      case (_, genres) => genres
+    }.groupBy(identity).mapValues(_.size)
+
+    // select the genre with the least and most ratings
+    val sorted_genres = genre_counts.collect().toList.sortBy { case (genre, count) => (count, genre) }
+    val least_genre = sorted_genres.head
+    val most_genre = sorted_genres.last
 
     (least_genre, most_genre)
   }

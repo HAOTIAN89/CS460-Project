@@ -131,8 +131,9 @@ class SimpleAnalytics() extends Serializable {
                                          requiredGenres: List[String],
                                          broadcastCallback: List[String] => Broadcast[List[String]]): RDD[String] = {
     val broadcast_genres = broadcastCallback(requiredGenres)
-    val filtered_movies_with_broadcast = movies.filter(movie => movie._3.intersect(broadcast_genres.value).nonEmpty)
-      .map(movie => movie._2)
+    val filtered_movies_with_broadcast = movies.filter {
+      case (_, _, genres) => genres.exists(broadcast_genres.value.contains)
+    }.map(_._2)
 
     filtered_movies_with_broadcast
   }

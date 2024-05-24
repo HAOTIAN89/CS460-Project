@@ -29,7 +29,9 @@ class Recommender(sc: SparkContext, index: LSHIndex, ratings: RDD[(Int, Int, Opt
       .map { case (movie_id, _, _) => movie_id }
       .filter { movie_id => !user_movie_ids.contains(movie_id)}
       .collect().toList
-      .map { movie_id => (movie_id, predictor(userId, movie_id)) }
+      .map { movie_id =>
+        val prediction_score = predictor(userId, movie_id)
+        (movie_id, prediction_score) }
       .sortBy(-_._2).take(K)
   }
 

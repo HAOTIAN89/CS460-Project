@@ -1,6 +1,7 @@
 package app.recommender.baseline
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 
 class BaselinePredictor() extends Serializable {
@@ -17,7 +18,7 @@ class BaselinePredictor() extends Serializable {
       case ((sum1, count1), (sum2, count2)) => (sum1 + sum2, count1 + count2)
     }.mapValues{
       case (sum, count) => sum / count
-    }
+    }.persist(MEMORY_AND_DISK)
 
     // compute the average deviations per movie
     movie_avg_deviations = ratingsRDD.map {
@@ -30,7 +31,7 @@ class BaselinePredictor() extends Serializable {
       case ((sum1, count1), (sum2, count2)) => (sum1 + sum2, count1 + count2)
     }.mapValues {
       case (sum, count) => sum / count
-    }
+    }.persist(MEMORY_AND_DISK)
 
     // compute the global average rating
     global_avg = ratingsRDD.map(_._4).mean()

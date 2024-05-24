@@ -11,12 +11,10 @@ this project, we are expected to implement data processing pipelines over **Apac
 - Version Control: GitLab, GitHub
 - Java Development Kit (JDK): Java 11
 
-### Framework
+### Implementation
 
-![Framework](framework.png "Framework")
-
-The implementation code is in `src/main/scala/app`
+All implementation codes are in `src/main/scala/app`
 
 ### Test
 
-The test code is in `src/main/test`, and can be directly run by the JetBrains IntelliJ IDEA
+The test codes are in `src/main/test`, and can be directly run through the JetBrains IntelliJ IDEA

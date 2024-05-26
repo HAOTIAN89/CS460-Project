@@ -14,6 +14,7 @@ import scala.reflect.ClassTag
  */
 class LSHIndex(data: RDD[(Int, String, List[String])], seed : IndexedSeq[Int]) extends Serializable {
   private val minhash = new MinHash(seed)
+  private val hashes = hash(data.map(_._3))
 
   /**
    * Hash function for an RDD of queries.
@@ -32,14 +33,14 @@ class LSHIndex(data: RDD[(Int, String, List[String])], seed : IndexedSeq[Int]) e
    */
   def getBuckets()
   : RDD[(IndexedSeq[Int], List[(Int, String, List[String])])] = {
-    val buckets = data.map { case (id, name, keywords) =>
-      (minhash.hash(keywords), (id, name, keywords))
-    }.groupByKey().mapValues(_.toList)
-    val numPartitions = buckets.getNumPartitions
-    val partitioner = new HashPartitioner(numPartitions)
+    val buckets = data.zip(hashes).map {
+      case ((id, name, keywords), (signature, _)) =>
+        (signature, (id, name, keywords))
+    }.groupByKey()
+    .mapValues(_.toList)
+    .partitionBy(new HashPartitioner(data.partitions.length))
 
     // optional
-    buckets.partitionBy(partitioner)
     buckets.cache()
     buckets
   }

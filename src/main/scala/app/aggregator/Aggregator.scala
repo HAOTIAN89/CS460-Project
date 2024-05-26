@@ -95,9 +95,10 @@ class Aggregator(sc: SparkContext) extends Serializable {
     val combOp = pattern
 
     // filter movies by keywords
+    val keywords_set = keywords.toSet
     val filtered_titles = movie_id_ratings.filter {
       case (_, (_, _, _, id_keywords)) =>
-        keywords.forall(id_keywords.contains)
+        id_keywords.toSet.intersect(keywords.toSet).size == keywords_set.size
     }
 
     // aggregate to compute the total rating and count

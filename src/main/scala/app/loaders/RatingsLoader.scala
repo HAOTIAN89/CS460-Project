@@ -22,12 +22,13 @@ class RatingsLoader(sc : SparkContext, path : String) extends Serializable {
     val raws = sc.textFile(getClass.getResource(path).getPath)
     // val raw = sc.textFile(path)
     raws.map { raw =>
-      val splitting = raw.split("\\|")
-      val user_id = splitting(0).toInt
-      val movie_id = splitting(1).toInt
-      val old_rating = if (splitting.length > 4 && splitting(2).nonEmpty) Some(splitting(2).toDouble) else None // option
-      val new_rating = splitting(if (splitting.length == 4) 2 else 3).toDouble
-      val timestamp = splitting(if (splitting.length == 4) 3 else 4).toInt
+      val split_parts = raw.split("\\|")
+      val user_id = split_parts(0).toInt
+      val movie_id = split_parts(1).toInt
+      val old_rating = if (split_parts.length > 4 && split_parts(2).nonEmpty)
+        Some(split_parts(2).toDouble) else None // option
+      val new_rating = split_parts(if (split_parts.length == 4) 2 else 3).toDouble
+      val timestamp = split_parts(if (split_parts.length == 4) 3 else 4).toInt
       (user_id, movie_id, old_rating, new_rating, timestamp)
      }
   }

@@ -22,10 +22,10 @@ class MoviesLoader(sc: SparkContext, path: String) extends Serializable {
     val raws = sc.textFile(getClass.getResource(path).getPath)
     // val raw = sc.textFile(path)
     raws.map { raw =>
-      val splitting = raw.split("\\|")
-      val movie_id = splitting(0).toInt
-      val movie_name = splitting(1).replaceAll("\"", "")
-      val movie_keywords = splitting.drop(2).map(_.replaceAll("\"", "")).toList
+      val split_parts = raw.split("\\|")
+      val movie_id = split_parts(0).toInt
+      val movie_name = split_parts(1).replaceAll("\"", "")
+      val movie_keywords = split_parts.drop(2).map(_.replaceAll("\"", "")).toList
       (movie_id, movie_name, movie_keywords)
     }
   }

@@ -23,10 +23,11 @@ class SimpleAnalytics() extends Serializable {
     ratingsPartitioner = new HashPartitioner(numPartitions)
     moviesPartitioner = new HashPartitioner(numPartitions)
 
-    val ratings_by_year = ratings.map{rating =>
-      val year = DateTime(rating._5 * 1000L).getYear
-      (rating._1, rating._2, rating._3, rating._4, year)
-    }.groupBy(_._5)
+    val ratings_by_year = ratings.map{
+      case (user_id, movie_id, old_rating, new_rating, timestamp) =>
+      val year = DateTime(timestamp * 1000L).getYear
+      (year, (user_id, movie_id, old_rating, new_rating, year))
+    }.groupByKey()
 
     val ratings_by_year_by_movie_id = ratings_by_year.mapValues(ratings => ratings.groupBy(_._2))
     val movies_by_id = movies.groupBy(_._1)
